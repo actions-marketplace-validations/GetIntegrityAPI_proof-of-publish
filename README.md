@@ -8,7 +8,7 @@
 
 ---
 
-Generate a **cryptographically verifiable publish receipt** for every CI/CD release.
+Generate a public verification URL, signed publish proof, SHA-256 integrity digest, and audit-ready receipt artifacts for every CI/CD release.
 
 Each workflow run produces a **signed proof capsule anchored in the GetIntegrity tamper-evident ledger**, enabling independent verification of software releases, build events, and deployment activity.
 
