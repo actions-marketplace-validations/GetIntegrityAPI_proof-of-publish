@@ -16,7 +16,10 @@ function mustGetEnv(name, fallback = "") {
 function writeGithubOutput(key, value) {
   const outFile = process.env.GITHUB_OUTPUT;
   if (!outFile) return;
-  fs.appendFileSync(outFile, `${key}=${String(value).replace(/\r?\n/g, " ")}\n`);
+  fs.appendFileSync(
+    outFile,
+    `${key}=${String(value).replace(/\r?\n/g, " ")}\n`
+  );
 }
 
 function sha256File(filePath) {
@@ -33,10 +36,6 @@ function safeString(v) {
   } catch {
     return String(v);
   }
-}
-
-function boolLabel(v) {
-  return v === true ? "Yes" : v === false ? "No" : "";
 }
 
 /* -----------------------------
@@ -71,13 +70,10 @@ function renderReceiptPdf(pdfPath, receipt, receiptHash) {
       doc.fontSize(11);
     }
 
-    function writeField(label, value, options = {}) {
+    function writeField(label, value) {
       const text = safeString(value);
       if (!text) return;
-      doc.text(`${label}: ${text}`, {
-        width: 499,
-        ...options,
-      });
+      doc.text(`${label}: ${text}`, { width: 499 });
     }
 
     // Header
@@ -95,12 +91,14 @@ function renderReceiptPdf(pdfPath, receipt, receiptHash) {
     writeField("Verified", verified ? "true" : "false");
     writeField("Latency (ms)", latencyMs);
 
-    doc.moveDown(0.5);
-    doc.text(`Receipt URL: ${safeString(receipt.receipt_url)}`, {
-      link: safeString(receipt.receipt_url),
-      underline: true,
-      width: 499,
-    });
+    if (receipt?.receipt_url) {
+      doc.moveDown(0.5);
+      doc.text(`Receipt URL: ${safeString(receipt.receipt_url)}`, {
+        link: safeString(receipt.receipt_url),
+        underline: true,
+        width: 499,
+      });
+    }
 
     doc.moveDown(0.5);
     doc.moveTo(48, doc.y).lineTo(547, doc.y).stroke();
@@ -208,7 +206,9 @@ async function run() {
     }
 
     const proofId = response.data.proof_id;
-    const receiptUrl = response.data.receipt_url;
+    const receiptUrl =
+      response.data.receipt_url ||
+      (proofId ? `https://api.getintegrityapi.com/verify/${proofId}` : "");
 
     const receipt = {
       receipt_version: "1",
