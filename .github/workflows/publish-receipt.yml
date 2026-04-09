@@ -54,7 +54,7 @@ jobs:
       - name: Publish Verification Summary
         shell: bash
         run: |
-          echo "## GetIntegrity Publish Receipt" >> $GITHUB_STEP_SUMMARY
+          echo "## GetIntegrityAPI Publish Receipt" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Proof ID:** ${{ steps.publish.outputs.proof_id }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
