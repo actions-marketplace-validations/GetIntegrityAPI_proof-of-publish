@@ -35,6 +35,10 @@ function safeString(v) {
   }
 }
 
+function boolLabel(v) {
+  return v === true ? "Yes" : v === false ? "No" : "";
+}
+
 /* -----------------------------
 PDF Receipt Renderer
 ------------------------------*/
@@ -42,84 +46,111 @@ PDF Receipt Renderer
 function renderReceiptPdf(pdfPath, receipt, receiptHash) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 48 });
-
     const stream = fs.createWriteStream(pdfPath);
+
     stream.on("finish", resolve);
     stream.on("error", reject);
 
     doc.pipe(stream);
 
-    // Header
-    doc.fontSize(22).text("GetIntegrityAPI — Publish Proof Receipt");
-    doc.moveDown(0.5);
+    const proofResponse = receipt?.proof_response || {};
+    const capsule = proofResponse?.capsule || {};
+    const lineage = proofResponse?.lineage || {};
+    const gh = receipt?.github_context || {};
 
     const verified =
-      receipt?.proof_response?.verified === true ||
-      receipt?.proof_response?.verified === "true";
+      proofResponse?.verified === true || proofResponse?.verified === "true";
 
-    doc.fontSize(12).text(`Status: ${verified ? "VERIFIED ✅" : "UNVERIFIED ❌"}`);
+    const validator = safeString(capsule.validator || proofResponse.validator);
+    const latencyMs = safeString(proofResponse.latency_ms);
+
+    function sectionTitle(title) {
+      doc.moveDown(0.25);
+      doc.fontSize(14).text(title);
+      doc.moveDown(0.25);
+      doc.fontSize(11);
+    }
+
+    function writeField(label, value, options = {}) {
+      const text = safeString(value);
+      if (!text) return;
+      doc.text(`${label}: ${text}`, {
+        width: 499,
+        ...options,
+      });
+    }
+
+    // Header
+    doc.fontSize(22).text("GetIntegrityAPI - Publish Proof Receipt");
+    doc.moveDown(0.5);
+
+    doc.fontSize(12).text(`Status: ${verified ? "VERIFIED" : "UNVERIFIED"}`);
     doc.moveDown(0.5);
 
     doc.fontSize(11);
-    doc.text(`Proof ID: ${safeString(receipt.proof_id)}`);
-    doc.text(`Issued At: ${safeString(receipt.issued_at)}`);
-    doc.text(`Validator: ${safeString(receipt?.proof_response?.validator)}`);
-    doc.moveDown(0.5);
+    writeField("Receipt Version", receipt.receipt_version || "1");
+    writeField("Proof ID", receipt.proof_id);
+    writeField("Issued At", receipt.issued_at);
+    writeField("Validator", validator);
+    writeField("Verified", verified ? "true" : "false");
+    writeField("Latency (ms)", latencyMs);
 
+    doc.moveDown(0.5);
     doc.text(`Receipt URL: ${safeString(receipt.receipt_url)}`, {
       link: safeString(receipt.receipt_url),
       underline: true,
+      width: 499,
     });
 
     doc.moveDown(0.5);
-
     doc.moveTo(48, doc.y).lineTo(547, doc.y).stroke();
     doc.moveDown(0.75);
 
     // GitHub context
-    doc.fontSize(14).text("GitHub Context");
-    doc.moveDown(0.25);
-
-    const gh = receipt.github_context || {};
-
-    doc.fontSize(11);
-    doc.text(`Repository: ${safeString(gh.repository)}`);
-    doc.text(`Commit: ${safeString(gh.commit)}`);
-    doc.text(`Actor: ${safeString(gh.actor)}`);
-    doc.text(`Workflow: ${safeString(gh.workflow)}`);
-    doc.text(`Run ID: ${safeString(gh.run_id)}`);
-    doc.text(`Run Number: ${safeString(gh.run_number)}`);
-    doc.text(`Ref: ${safeString(gh.ref)}`);
-
-    doc.moveDown(0.75);
+    sectionTitle("GitHub Context");
+    writeField("Repository", gh.repository);
+    writeField("Commit", gh.commit);
+    writeField("Actor", gh.actor);
+    writeField("Workflow", gh.workflow);
+    writeField("Run ID", gh.run_id);
+    writeField("Run Number", gh.run_number);
+    writeField("Ref", gh.ref);
 
     // Capsule summary
-    doc.fontSize(14).text("Cryptographic Capsule Summary");
-    doc.moveDown(0.25);
-
-    const capsule = receipt?.proof_response?.capsule || {};
-
-    doc.fontSize(11);
-    doc.text(`Algorithm: ${safeString(capsule.alg)}`);
-    doc.text(`Key ID (kid): ${safeString(capsule.kid)}`);
-    doc.text(`HP Version: ${safeString(capsule.hp_version)}`);
-
     doc.moveDown(0.75);
+    sectionTitle("Cryptographic Capsule Summary");
+    writeField("Algorithm", capsule.alg);
+    writeField("Key ID (kid)", capsule.kid);
+    writeField("HP Version", capsule.hp_version);
+    writeField("Capsule Timestamp", capsule.timestamp);
+    writeField("Capsule Digest", capsule.digest);
+    writeField("Signature", capsule.signature);
+
+    // Lineage summary
+    if (
+      lineage.seq !== undefined ||
+      lineage.prev_chain_digest !== undefined ||
+      lineage.chain_digest !== undefined
+    ) {
+      doc.moveDown(0.75);
+      sectionTitle("Lineage Summary");
+      writeField("Sequence", lineage.seq);
+      writeField("Previous Chain Digest", lineage.prev_chain_digest);
+      writeField("Chain Digest", lineage.chain_digest);
+    }
 
     // Offline verification
-    doc.fontSize(14).text("Offline Verification");
-    doc.moveDown(0.25);
-
-    doc.fontSize(11);
+    doc.moveDown(0.75);
+    sectionTitle("Offline Verification");
     doc.text("1) Compute SHA256 of receipt.json");
     doc.text("2) Compare with receipt.sha256");
+    doc.text("3) Verify the signed capsule using the published public key material");
     doc.moveDown(0.25);
-    doc.text(`Receipt SHA256: ${receiptHash}`);
+    writeField("Receipt SHA256", receiptHash);
 
-    doc.moveDown(1);
-
+    doc.moveDown(0.75);
     doc.fontSize(10).text(
-      "This PDF is an informational rendering of receipt.json. Offline verification is performed by hashing receipt.json and comparing it to receipt.sha256."
+      "This PDF is a human-readable summary of receipt.json. The canonical evidence artifact is receipt.json, and offline integrity verification is performed by hashing receipt.json and comparing it to receipt.sha256."
     );
 
     doc.end();
@@ -180,6 +211,7 @@ async function run() {
     const receiptUrl = response.data.receipt_url;
 
     const receipt = {
+      receipt_version: "1",
       proof_id: proofId,
       receipt_url: receiptUrl,
       issued_at: new Date().toISOString(),
@@ -194,12 +226,11 @@ async function run() {
     // Write receipt.json
     fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2), "utf8");
 
-    // Compute hash
+    // Compute hash of canonical evidence artifact
     const receiptHash = sha256File(receiptPath);
-
     fs.writeFileSync(hashPath, receiptHash + "\n", "utf8");
 
-    // Render PDF
+    // Render PDF summary
     await renderReceiptPdf(pdfPath, receipt, receiptHash);
 
     console.log("Proof ID:", proofId);
@@ -216,7 +247,6 @@ async function run() {
     writeGithubOutput("receipt_json_path", receiptPath);
     writeGithubOutput("receipt_sha256_path", hashPath);
     writeGithubOutput("receipt_pdf_path", pdfPath);
-
   } catch (error) {
     const message =
       error?.response?.data?.error ||
