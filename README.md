@@ -4,6 +4,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Proof%20of%20Publish-blue)](https://github.com/marketplace/actions/getintegrityapi-proof-of-publish)
 
+<p align="center">
+  <img src="https://assets.getintegrityapi.com/Website-images/Release-Integrity-CICD.png" alt="GetIntegrityAPI Proof of Publish for GitHub Actions: release integrity, public verification URL, signed proof, and artifact bundle" width="100%">
+</p>
+
 **Category:** CI/CD Security • Release Integrity • Supply Chain Verification
 
 Generate a public verification URL, signed publish proof, SHA-256 integrity digest, and audit-ready receipt artifacts for every CI/CD release.
